@@ -160,6 +160,39 @@
         </div>
       </section>
 
+      <section class="panel assistant-panel full-span">
+        <h2>Assistant</h2>
+        <p class="panel-note">Ask to adjust comfort, cruise, or infotainment settings while keeping everyone safe.</p>
+        <div class="assistant-shell">
+          <div id="assistant-messages" class="assistant-messages"></div>
+          <div class="assistant-toolbar">
+            <div class="assistant-select-group">
+              <label for="assistant-provider">Model source</label>
+              <select id="assistant-provider" class="assistant-select">
+                <option value="google">Gemini (default)</option>
+                <option value="azure">Azure OpenAI</option>
+              </select>
+            </div>
+            <button id="assistant-voice-input" class="assistant-voice" type="button">Start voice</button>
+            <label class="assistant-toggle">
+              <input id="assistant-voice-output" type="checkbox" />
+              <span>Voice replies</span>
+            </label>
+          </div>
+          <form id="assistant-form" class="assistant-form" autocomplete="off">
+            <input
+              id="assistant-input"
+              class="assistant-input"
+              type="text"
+              placeholder="Try: Set cabin to 21 C and turn on seat heating."
+              aria-label="Assistant message"
+            />
+            <button class="assistant-send" type="submit">Send</button>
+          </form>
+          <div id="assistant-status" class="assistant-status"></div>
+        </div>
+      </section>
+
       <section class="panel registry-panel full-span">
         <h2>Controls Registry</h2>
         <p class="panel-note">Copy this JSON into LLM context to describe available controls.</p>

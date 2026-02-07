@@ -3,8 +3,20 @@ let controlMap = {};
 let currentState = {};
 let controlsRegistry = { schema_version: 2, controls: [] };
 let currentTelemetry = {};
+let assistantHistory = [];
+const MAX_ASSISTANT_HISTORY = 10;
 
 const connectionStatus = document.getElementById("connection-status");
+const assistantMessages = document.getElementById("assistant-messages");
+const assistantForm = document.getElementById("assistant-form");
+const assistantInput = document.getElementById("assistant-input");
+const assistantStatus = document.getElementById("assistant-status");
+const assistantProvider = document.getElementById("assistant-provider");
+const assistantVoiceInput = document.getElementById("assistant-voice-input");
+const assistantVoiceOutput = document.getElementById("assistant-voice-output");
+
+let speechRecognition = null;
+let isListening = false;
 
 function buildControlMap(controls) {
   const map = {};
@@ -156,6 +168,168 @@ function setConnectionState(isConnected) {
     connectionStatus.textContent = "Offline";
     connectionStatus.style.color = "#f87171";
   }
+}
+
+function setAssistantStatus(message) {
+  if (assistantStatus) {
+    assistantStatus.textContent = message;
+  }
+}
+
+function renderAssistantMessages() {
+  if (!assistantMessages) {
+    return;
+  }
+  assistantMessages.innerHTML = "";
+  assistantHistory.forEach((entry) => {
+    const bubble = document.createElement("div");
+    bubble.className = `assistant-message ${entry.role}`;
+    bubble.textContent = entry.content;
+    assistantMessages.appendChild(bubble);
+  });
+  assistantMessages.scrollTop = assistantMessages.scrollHeight;
+}
+
+function pushAssistantMessage(role, content) {
+  if (!content) {
+    return;
+  }
+  assistantHistory.push({ role, content });
+  if (assistantHistory.length > MAX_ASSISTANT_HISTORY) {
+    assistantHistory = assistantHistory.slice(-MAX_ASSISTANT_HISTORY);
+  }
+  renderAssistantMessages();
+}
+
+function speakAssistantReply(text) {
+  if (!assistantVoiceOutput?.checked) {
+    return;
+  }
+  if (!("speechSynthesis" in window)) {
+    return;
+  }
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = 1;
+  utterance.pitch = 1;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utterance);
+}
+
+async function sendAssistantMessage(message) {
+  const trimmed = message.trim();
+  if (!trimmed) {
+    return;
+  }
+  pushAssistantMessage("user", trimmed);
+  if (assistantInput) {
+    assistantInput.value = "";
+  }
+  setAssistantStatus("Thinking...");
+  try {
+    const response = await fetch("/api/assistant", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: trimmed,
+        history: assistantHistory,
+        provider: assistantProvider?.value || "google",
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Assistant error.");
+    }
+    pushAssistantMessage("assistant", data.reply || "Ready for the next request.");
+    speakAssistantReply(data.reply || "Ready for the next request.");
+    if (data.state) {
+      currentState = data.state;
+      renderAll();
+      loadTelemetry();
+    }
+    setAssistantStatus("");
+  } catch (error) {
+    pushAssistantMessage(
+      "assistant",
+      `Sorry, I couldn't reach the assistant. ${error.message}`
+    );
+    speakAssistantReply(
+      `Sorry, I couldn't reach the assistant. ${error.message}`
+    );
+    setAssistantStatus("Assistant unavailable.");
+  }
+}
+
+function setupVoiceControls() {
+  if (!assistantVoiceInput) {
+    return;
+  }
+  const SpeechRecognition =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    assistantVoiceInput.disabled = true;
+    assistantVoiceInput.textContent = "Voice unavailable";
+    return;
+  }
+
+  speechRecognition = new SpeechRecognition();
+  speechRecognition.lang = "en-US";
+  speechRecognition.interimResults = false;
+  speechRecognition.maxAlternatives = 1;
+
+  speechRecognition.onresult = (event) => {
+    const transcript = event.results?.[0]?.[0]?.transcript;
+    if (transcript) {
+      sendAssistantMessage(transcript);
+    }
+  };
+
+  speechRecognition.onerror = (event) => {
+    setAssistantStatus(`Voice input error: ${event.error || "unknown"}.`);
+  };
+
+  speechRecognition.onend = () => {
+    isListening = false;
+    assistantVoiceInput.classList.remove("listening");
+    assistantVoiceInput.textContent = "Start voice";
+  };
+
+  assistantVoiceInput.addEventListener("click", () => {
+    if (!speechRecognition) {
+      return;
+    }
+    if (isListening) {
+      speechRecognition.stop();
+      return;
+    }
+    try {
+      speechRecognition.start();
+      isListening = true;
+      assistantVoiceInput.classList.add("listening");
+      assistantVoiceInput.textContent = "Listening...";
+      setAssistantStatus("Listening...");
+    } catch (error) {
+      setAssistantStatus("Voice input failed to start.");
+    }
+  });
+}
+
+function initAssistant() {
+  if (!assistantMessages || !assistantForm || !assistantInput) {
+    return;
+  }
+  assistantHistory = [
+    {
+      role: "assistant",
+      content:
+        "Hi! I can set the cabin, cruise, wipers, and infotainment. Tell me how you'd like the car configured.",
+    },
+  ];
+  renderAssistantMessages();
+  assistantForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    sendAssistantMessage(assistantInput.value || "");
+  });
+  setupVoiceControls();
 }
 
 async function sendUpdate(control, rawValue) {
@@ -546,6 +720,7 @@ async function loadData() {
     setConnectionState(true);
     loadTelemetry();
     setInterval(loadTelemetry, 2000);
+    initAssistant();
   } catch (error) {
     setConnectionState(false);
   }

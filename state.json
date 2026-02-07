@@ -16,19 +16,19 @@
     "passenger_level": 0
   },
   "tacc": {
-    "enabled": true,
-    "car_speed_kph": 150,
+    "enabled": false,
+    "car_speed_kph": 50,
     "follow_distance": 1,
     "car_speed_mph": 50
   },
   "wipers": {
-    "mode": "auto",
-    "frequency_level": 1
+    "mode": "manual",
+    "frequency_level": 2
   },
   "infotainment": {
     "power": true,
     "volume": 12,
-    "active_app": "Local Games",
+    "active_app": "Weather",
     "radio_band": "FM",
     "bluetooth_connected": false,
     "screencast_active": false,
