@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Car Dashboard Simulator</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div>
+        <p class="eyebrow">Simulator</p>
+        <h1>Car Dashboard</h1>
+        <p class="subtitle">Live controls plus a machine-readable registry for future LLM control.</p>
+      </div>
+      <div id="connection-status" class="connection-status">Loading...</div>
+    </header>
+
+    <main class="content">
+      <section class="panel display-panel">
+        <h2>Main Gauge Cluster</h2>
+        <p class="panel-note">Driving status and core vehicle systems.</p>
+
+        <div class="screen gauge-screen">
+          <div class="gauge-layout">
+            <div class="speed-gauge">
+              <svg viewBox="0 0 140 140" class="gauge-svg">
+                <circle class="gauge-track" cx="70" cy="70" r="58"></circle>
+                <circle class="gauge-value" cx="70" cy="70" r="58" data-gauge="speed"></circle>
+              </svg>
+              <div class="gauge-center">
+                <div id="speed-value" class="gauge-number">0</div>
+                <div id="speed-unit" class="gauge-unit">km/h</div>
+                <div class="gauge-caption">Cruise <span data-status-path="tacc.enabled"></span></div>
+              </div>
+            </div>
+
+            <div class="cluster-stack">
+              <div class="cluster-card">
+                <span class="cluster-label">Follow Distance</span>
+                <span class="cluster-value" data-status-path="tacc.follow_distance"></span>
+              </div>
+              <div class="cluster-card">
+                <span class="cluster-label">Cabin Temp</span>
+                <span class="cluster-value" data-status-path="ac.temperature_c"></span>
+              </div>
+              <div class="cluster-card">
+                <span class="cluster-label">Units</span>
+                <span class="cluster-value" data-status-path="units.system"></span>
+              </div>
+              <div class="cluster-card">
+                <span class="cluster-label">Odometer</span>
+                <span class="cluster-value" data-telemetry-key="odometer"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="indicator-row">
+            <div class="indicator" data-indicator-path="ac.power">
+              <span class="indicator-icon">AC</span>
+              <span class="indicator-label">Cabin</span>
+            </div>
+            <div class="indicator" data-indicator-path="seat_heating.driver_level" data-indicator-type="level" data-indicator-max="3">
+              <span class="indicator-icon">Heat D</span>
+              <span class="indicator-bars"><span></span><span></span><span></span></span>
+            </div>
+            <div class="indicator" data-indicator-path="seat_heating.passenger_level" data-indicator-type="level" data-indicator-max="3">
+              <span class="indicator-icon">Heat P</span>
+              <span class="indicator-bars"><span></span><span></span><span></span></span>
+            </div>
+            <div class="indicator" data-indicator-path="seat_cooling.driver_level" data-indicator-type="level" data-indicator-max="3">
+              <span class="indicator-icon">Cool D</span>
+              <span class="indicator-bars"><span></span><span></span><span></span></span>
+            </div>
+            <div class="indicator" data-indicator-path="seat_cooling.passenger_level" data-indicator-type="level" data-indicator-max="3">
+              <span class="indicator-icon">Cool P</span>
+              <span class="indicator-bars"><span></span><span></span><span></span></span>
+            </div>
+            <div class="indicator" data-indicator-path="wipers.mode">
+              <span class="indicator-icon">Wipers</span>
+              <span class="indicator-label" data-status-path="wipers.mode"></span>
+            </div>
+          </div>
+
+          <div class="telemetry-grid">
+            <div class="telemetry-card">
+              <span class="telemetry-label">Outside Temp</span>
+              <span class="telemetry-value" data-telemetry-key="outside_temp"></span>
+            </div>
+            <div class="telemetry-card">
+              <span class="telemetry-label">Range</span>
+              <span class="telemetry-value" data-telemetry-key="range"></span>
+            </div>
+            <div class="telemetry-card">
+              <span class="telemetry-label">Fuel</span>
+              <span class="telemetry-value" data-telemetry-key="fuel"></span>
+            </div>
+            <div class="telemetry-card">
+              <span class="telemetry-label">Engine Temp</span>
+              <span class="telemetry-value" data-telemetry-key="engine_temp"></span>
+            </div>
+            <div class="telemetry-card">
+              <span class="telemetry-label">Trip</span>
+              <span class="telemetry-value" data-telemetry-key="trip"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="controls-block">
+          <h3>Controls</h3>
+          <p class="panel-note">Interactive controls tied to the gauge cluster.</p>
+          <div id="controls-driving"></div>
+        </div>
+      </section>
+
+      <section class="panel display-panel">
+        <h2>Infotainment Display</h2>
+        <p class="panel-note">Entertainment-focused display with apps and media.</p>
+
+        <div class="screen infotainment-screen">
+          <div class="infotainment-header">
+            <div class="infotainment-clock">
+              <span class="clock-time" data-telemetry-key="clock_time"></span>
+              <span class="clock-date" data-telemetry-key="clock_date"></span>
+            </div>
+            <div class="infotainment-status">
+              <div class="status-chip">Bluetooth <span data-status-path="infotainment.bluetooth_connected"></span></div>
+              <div class="status-chip">Cast <span data-status-path="infotainment.screencast_active"></span></div>
+              <div class="status-chip">Volume <span data-status-path="infotainment.volume"></span></div>
+              <div class="status-chip">Outside <span data-telemetry-key="outside_temp"></span></div>
+            </div>
+          </div>
+
+          <div class="infotainment-body">
+            <div class="app-grid" id="app-grid"></div>
+
+            <div class="infotainment-side">
+              <div class="now-playing">
+                <div id="now-art" class="now-art"></div>
+                <div class="now-meta">
+                  <div id="now-title" class="now-title">Ready</div>
+                  <div id="now-subtitle" class="now-subtitle">Select an app to begin.</div>
+                </div>
+              </div>
+              <div class="context-panel">
+                <div class="context-row">Active App <span data-status-path="infotainment.active_app"></span></div>
+                <div class="context-row">Radio Band <span data-status-path="infotainment.radio_band"></span></div>
+                <div class="context-row">Local Game <span data-status-path="infotainment.local_game"></span></div>
+                <div class="context-row">Power <span data-status-path="infotainment.power"></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="controls-block">
+          <h3>Controls</h3>
+          <p class="panel-note">Interactive controls tied to the infotainment screen.</p>
+          <div id="controls-entertainment"></div>
+        </div>
+      </section>
+
+      <section class="panel registry-panel full-span">
+        <h2>Controls Registry</h2>
+        <p class="panel-note">Copy this JSON into LLM context to describe available controls.</p>
+        <pre id="controls-registry" class="registry"></pre>
+      </section>
+    </main>
+  </div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

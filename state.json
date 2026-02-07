@@ -1,0 +1,37 @@
+{
+  "units": {
+    "system": "metric"
+  },
+  "ac": {
+    "power": true,
+    "temperature_c": 20,
+    "temperature_f": 65
+  },
+  "seat_heating": {
+    "driver_level": 0,
+    "passenger_level": 0
+  },
+  "seat_cooling": {
+    "driver_level": 0,
+    "passenger_level": 0
+  },
+  "tacc": {
+    "enabled": true,
+    "car_speed_kph": 150,
+    "follow_distance": 1,
+    "car_speed_mph": 50
+  },
+  "wipers": {
+    "mode": "auto",
+    "frequency_level": 1
+  },
+  "infotainment": {
+    "power": true,
+    "volume": 12,
+    "active_app": "Local Games",
+    "radio_band": "FM",
+    "bluetooth_connected": false,
+    "screencast_active": false,
+    "local_game": "Elden Ring"
+  }
+}
