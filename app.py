@@ -4,11 +4,13 @@ from pathlib import Path
 from copy import deepcopy
 from datetime import datetime
 import math
+import os
 import time
 import json
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional, Tuple
 
 from flask import Flask, jsonify, render_template, request
+import requests
 
 ROOT = Path(__file__).parent
 CONTROLS_PATH = ROOT / "controls.json"
@@ -33,6 +35,34 @@ DEFAULT_STATE: Dict[str, Any] = {
 }
 
 app = Flask(__name__)
+ASSISTANT_MAX_HISTORY = 10
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3")
+DEFAULT_GEMINI_ENDPOINT = (
+    "https://generativelanguage.googleapis.com/v1beta/models"
+)
+ASSISTANT_PROMPT_CONFIG = {
+    "role": "You are an in-car assistant for a simulated vehicle.",
+    "goals": [
+        "Help passengers reach their destination safely.",
+        "Keep passengers comfortable by adjusting available controls.",
+        "Offer clear, concise guidance with a calm tone.",
+    ],
+    "safety_rules": [
+        "Be safety-first: discourage unsafe driving behavior.",
+        "Prefer safer settings when making tradeoffs.",
+    ],
+    "interaction_rules": [
+        "Only use the controls listed below.",
+        "If a request is outside the list, explain what is available.",
+        "When a request is ambiguous, ask a short clarifying question and do not apply changes.",
+        "Respond with JSON only using the specified schema.",
+    ],
+    "output_schema": '{ "reply": "...", "updates": { ... } }',
+    "output_notes": [
+        "The updates object must use control paths (dot-delimited) as keys.",
+        "If no updates are needed, return an empty updates object.",
+    ],
+}
 
 
 def read_json(path: Path, default: Any) -> Any:
@@ -97,6 +127,210 @@ def build_control_map(controls: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         if isinstance(path, str):
             mapping[path] = control
     return mapping
+
+
+def get_google_api_key() -> Optional[str]:
+    return os.environ.get("GEMINI_API_KEY")
+
+
+def summarize_controls(controls: Dict[str, Any]) -> List[Dict[str, Any]]:
+    summarized: List[Dict[str, Any]] = []
+    for control in controls.get("controls", []):
+        summarized.append(
+            {
+                "id": control.get("id"),
+                "label": control.get("label"),
+                "group": control.get("group"),
+                "module": control.get("module"),
+                "path": control.get("path"),
+                "type": control.get("type"),
+                "value_type": control.get("value_type"),
+                "values": control.get("values"),
+                "min": control.get("min"),
+                "max": control.get("max"),
+                "step": control.get("step"),
+                "units": control.get("units"),
+                "maps_to": control.get("maps_to"),
+                "conversion": control.get("conversion"),
+                "visible_when": control.get("visible_when"),
+                "description": control.get("description"),
+            }
+        )
+    return summarized
+
+
+def build_assistant_system_prompt(
+    controls: Dict[str, Any], state: Dict[str, Any]
+) -> str:
+    control_summary = summarize_controls(controls)
+    config = ASSISTANT_PROMPT_CONFIG
+    sections: List[str] = []
+    sections.append(config.get("role", "You are an assistant."))
+    goals = config.get("goals", [])
+    if goals:
+        sections.append("Goals:\n" + "\n".join(f"- {goal}" for goal in goals))
+    safety = config.get("safety_rules", [])
+    if safety:
+        sections.append("Safety:\n" + "\n".join(f"- {rule}" for rule in safety))
+    rules = config.get("interaction_rules", [])
+    if rules:
+        sections.append("Rules:\n" + "\n".join(f"- {rule}" for rule in rules))
+    output_schema = config.get("output_schema")
+    if output_schema:
+        sections.append(f"Output schema:\n{output_schema}")
+    output_notes = config.get("output_notes", [])
+    if output_notes:
+        sections.append(
+            "Output notes:\n" + "\n".join(f"- {note}" for note in output_notes)
+        )
+    sections.append(f"Controls:\n{json.dumps(control_summary, indent=2)}")
+    sections.append(f"Current state:\n{json.dumps(state, indent=2)}")
+    return "\n\n".join(sections)
+
+
+def normalize_history(history: Any) -> List[Dict[str, str]]:
+    if not isinstance(history, list):
+        return []
+    normalized: List[Dict[str, str]] = []
+    for item in history:
+        if not isinstance(item, dict):
+            continue
+        role = item.get("role")
+        content = item.get("content")
+        if role not in {"user", "assistant"}:
+            continue
+        if not isinstance(content, str) or not content.strip():
+            continue
+        normalized.append({"role": role, "content": content.strip()})
+    return normalized[-ASSISTANT_MAX_HISTORY :]
+
+
+def build_google_contents(
+    history: List[Dict[str, str]], message: str
+) -> List[Dict[str, Any]]:
+    contents: List[Dict[str, Any]] = []
+    for item in history:
+        role = "model" if item["role"] == "assistant" else "user"
+        contents.append({"role": role, "parts": [{"text": item["content"]}]})
+    if message:
+        if not history or history[-1]["role"] != "user" or history[-1]["content"] != message:
+            contents.append({"role": "user", "parts": [{"text": message}]})
+    return contents
+
+
+def build_azure_messages(
+    history: List[Dict[str, str]], message: str, system_prompt: str
+) -> List[Dict[str, str]]:
+    messages = [{"role": "system", "content": system_prompt}]
+    for item in history:
+        if item["role"] == "assistant":
+            messages.append({"role": "assistant", "content": item["content"]})
+        else:
+            messages.append({"role": "user", "content": item["content"]})
+    if message:
+        if not history or history[-1]["role"] != "user" or history[-1]["content"] != message:
+            messages.append({"role": "user", "content": message})
+    return messages
+
+
+def call_google_gemini(
+    message: str, history: List[Dict[str, str]], system_prompt: str
+) -> Tuple[Optional[str], Optional[str]]:
+    api_key = get_google_api_key()
+    if not api_key:
+        return (
+            None,
+            "Missing API key. Set GEMINI_API_KEY in your environment.",
+        )
+
+    endpoint = os.environ.get("GEMINI_API_ENDPOINT", DEFAULT_GEMINI_ENDPOINT)
+    url = f"{endpoint}/{GEMINI_MODEL}:generateContent"
+    payload = {
+        "contents": build_google_contents(history, message),
+        "systemInstruction": {"parts": [{"text": system_prompt}]},
+        "generationConfig": {
+            "temperature": 0.4,
+            "responseMimeType": "application/json",
+        },
+    }
+    try:
+        response = requests.post(
+            url,
+            headers={"Content-Type": "application/json", "X-goog-api-key": api_key},
+            json=payload,
+            timeout=30,
+        )
+    except requests.RequestException as exc:
+        return None, f"Gemini request failed: {exc}"
+    if response.status_code >= 400:
+        return None, f"Gemini error ({response.status_code}): {response.text}"
+
+    data = response.json()
+    try:
+        return data["candidates"][0]["content"]["parts"][0]["text"], None
+    except (KeyError, IndexError, TypeError):
+        return None, "Gemini response was missing text content."
+
+
+def call_azure_openai(
+    message: str, history: List[Dict[str, str]], system_prompt: str
+) -> Tuple[Optional[str], Optional[str]]:
+    api_key = os.environ.get("AZURE_OPENAI_API_KEY")
+    endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
+    deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT")
+    api_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
+
+    if not api_key:
+        return None, "Missing AZURE_OPENAI_API_KEY environment variable."
+    if not endpoint or not deployment:
+        return (
+            None,
+            "Missing Azure settings. Set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT.",
+        )
+
+    try:
+        from openai import AzureOpenAI
+    except ImportError as exc:
+        return None, f"openai is not installed: {exc}"
+
+    client = AzureOpenAI(
+        api_version=api_version,
+        azure_endpoint=endpoint,
+        api_key=api_key,
+    )
+    messages = build_azure_messages(history, message, system_prompt)
+    try:
+        response = client.chat.completions.create(
+            messages=messages,
+            max_completion_tokens=1024,
+            model=deployment,
+        )
+    except Exception as exc:  # pragma: no cover - network bound
+        return None, f"Azure request failed: {exc}"
+    try:
+        return response.choices[0].message.content, None
+    except (AttributeError, IndexError):
+        return None, "Azure response was missing text content."
+
+
+def parse_model_json(text: str) -> Any:
+    if not text:
+        return None
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.replace("```json", "").replace("```", "").strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            snippet = cleaned[start : end + 1]
+            try:
+                return json.loads(snippet)
+            except json.JSONDecodeError:
+                return None
+    return None
 
 
 def normalize_value(control: Dict[str, Any], value: Any) -> Any:
@@ -281,6 +515,60 @@ def update_state():
         payload = {}
     updated = apply_update(STATE, payload)
     return jsonify(updated)
+
+
+@app.post("/api/assistant")
+def assistant():
+    refresh_controls()
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        payload = {}
+
+    message = payload.get("message")
+    if not isinstance(message, str) or not message.strip():
+        return jsonify({"error": "message is required"}), 400
+    message = message.strip()
+
+    history = normalize_history(payload.get("history"))
+
+    provider = str(payload.get("provider") or "google").strip().lower()
+
+    system_prompt = build_assistant_system_prompt(CONTROLS, STATE)
+    if provider == "google":
+        response_text, error = call_google_gemini(message, history, system_prompt)
+    elif provider == "azure":
+        response_text, error = call_azure_openai(message, history, system_prompt)
+    else:
+        return jsonify({"error": f"Unknown provider: {provider}"}), 400
+
+    if error:
+        return jsonify({"error": error}), 502
+
+    parsed = parse_model_json(response_text or "")
+    if not isinstance(parsed, dict):
+        return jsonify({"error": "Model response was not valid JSON."}), 502
+
+    reply = parsed.get("reply")
+    if not isinstance(reply, str) or not reply.strip():
+        reply = "I can help with driving, comfort, or infotainment settings. What would you like to adjust?"
+
+    updates = parsed.get("updates")
+    if not isinstance(updates, dict):
+        updates = {}
+
+    if updates:
+        updated_state = apply_update(STATE, updates)
+    else:
+        updated_state = STATE
+
+    return jsonify(
+        {
+            "reply": reply.strip(),
+            "updates": updates,
+            "state": updated_state,
+            "provider": provider,
+        }
+    )
 
 
 if __name__ == "__main__":

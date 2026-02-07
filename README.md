@@ -6,8 +6,10 @@ A lightweight Python + Flask dashboard simulator with explicit controls and a ma
 1. `python -m venv .venv`
 2. `source .venv/bin/activate` (Windows: `.venv\Scripts\activate`)
 3. `pip install -r requirements.txt`
-4. `python app.py`
-5. Open `http://127.0.0.1:5000`
+4. `export GEMINI_API_KEY="YOUR_KEY"` (Windows PowerShell: `$env:GEMINI_API_KEY="YOUR_KEY"`)
+5. `export GEMINI_MODEL="gemini-3"` (optional)
+6. `python app.py`
+7. Open `http://127.0.0.1:5000`
 
 **LLM-Ready Controls**
 - Registry file: `controls.json`
@@ -22,4 +24,17 @@ Example update:
 curl -X POST http://127.0.0.1:5000/api/state \
   -H "Content-Type: application/json" \
   -d '{"ac":{"power":true},"tacc":{"car_speed_kph":110}}'
+```
+
+**Assistant (Gemini or Azure OpenAI)**
+- Gemini: set `GEMINI_API_KEY`. Optional `GEMINI_MODEL` and `GEMINI_API_ENDPOINT`.
+- Azure: set `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`, optional `AZURE_OPENAI_API_VERSION`.
+- Endpoint: `POST /api/assistant` with `"provider": "google"` or `"provider": "azure"`.
+- Voice: the UI uses the browser Web Speech API for voice input/output and may require HTTPS and mic permissions.
+
+Example request:
+```bash
+curl -X POST http://127.0.0.1:5000/api/assistant \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Make it 21 C, turn on driver seat heating, and switch to Navigation.","provider":"google"}'
 ```
