@@ -13,6 +13,7 @@ A lightweight Python + Flask dashboard simulator with explicit controls and a ma
 - Registry file: `controls.json`
 - Registry endpoint: `GET /api/controls`
 - State endpoint: `GET /api/state`
+- Telemetry endpoint: `GET /api/telemetry` (derived simulation values)
 - Update endpoint: `POST /api/state` (JSON patch by control path)
 - Units: internal state is metric; `units.system` toggles metric/imperial display and exposes F/mph input controls.
 

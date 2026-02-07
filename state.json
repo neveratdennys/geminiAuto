@@ -3,8 +3,8 @@
     "system": "metric"
   },
   "ac": {
-    "power": false,
-    "temperature_c": 22,
+    "power": true,
+    "temperature_c": 20,
     "temperature_f": 65
   },
   "seat_heating": {
@@ -16,8 +16,8 @@
     "passenger_level": 0
   },
   "tacc": {
-    "enabled": false,
-    "car_speed_kph": 88,
+    "enabled": true,
+    "car_speed_kph": 150,
     "follow_distance": 1,
     "car_speed_mph": 50
   },
@@ -27,11 +27,11 @@
   },
   "infotainment": {
     "power": true,
-    "volume": 18,
+    "volume": 12,
     "active_app": "Local Games",
     "radio_band": "FM",
     "bluetooth_connected": false,
     "screencast_active": false,
-    "local_game": "League of Legends"
+    "local_game": "Elden Ring"
   }
 }

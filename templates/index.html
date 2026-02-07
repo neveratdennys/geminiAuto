@@ -21,36 +21,89 @@
       <section class="panel display-panel">
         <h2>Main Gauge Cluster</h2>
         <p class="panel-note">Driving status and core vehicle systems.</p>
-        <div class="status-grid">
-          <div class="status-card">
-            <h3>Units</h3>
-            <div class="status-row">System <span data-status-path="units.system"></span></div>
+
+        <div class="screen gauge-screen">
+          <div class="gauge-layout">
+            <div class="speed-gauge">
+              <svg viewBox="0 0 140 140" class="gauge-svg">
+                <circle class="gauge-track" cx="70" cy="70" r="58"></circle>
+                <circle class="gauge-value" cx="70" cy="70" r="58" data-gauge="speed"></circle>
+              </svg>
+              <div class="gauge-center">
+                <div id="speed-value" class="gauge-number">0</div>
+                <div id="speed-unit" class="gauge-unit">km/h</div>
+                <div class="gauge-caption">Cruise <span data-status-path="tacc.enabled"></span></div>
+              </div>
+            </div>
+
+            <div class="cluster-stack">
+              <div class="cluster-card">
+                <span class="cluster-label">Follow Distance</span>
+                <span class="cluster-value" data-status-path="tacc.follow_distance"></span>
+              </div>
+              <div class="cluster-card">
+                <span class="cluster-label">Cabin Temp</span>
+                <span class="cluster-value" data-status-path="ac.temperature_c"></span>
+              </div>
+              <div class="cluster-card">
+                <span class="cluster-label">Units</span>
+                <span class="cluster-value" data-status-path="units.system"></span>
+              </div>
+              <div class="cluster-card">
+                <span class="cluster-label">Odometer</span>
+                <span class="cluster-value" data-telemetry-key="odometer"></span>
+              </div>
+            </div>
           </div>
-          <div class="status-card">
-            <h3>AC</h3>
-            <div class="status-row">Power <span data-status-path="ac.power"></span></div>
-            <div class="status-row">Temperature <span data-status-path="ac.temperature_c"></span></div>
+
+          <div class="indicator-row">
+            <div class="indicator" data-indicator-path="ac.power">
+              <span class="indicator-icon">AC</span>
+              <span class="indicator-label">Cabin</span>
+            </div>
+            <div class="indicator" data-indicator-path="seat_heating.driver_level" data-indicator-type="level" data-indicator-max="3">
+              <span class="indicator-icon">Heat D</span>
+              <span class="indicator-bars"><span></span><span></span><span></span></span>
+            </div>
+            <div class="indicator" data-indicator-path="seat_heating.passenger_level" data-indicator-type="level" data-indicator-max="3">
+              <span class="indicator-icon">Heat P</span>
+              <span class="indicator-bars"><span></span><span></span><span></span></span>
+            </div>
+            <div class="indicator" data-indicator-path="seat_cooling.driver_level" data-indicator-type="level" data-indicator-max="3">
+              <span class="indicator-icon">Cool D</span>
+              <span class="indicator-bars"><span></span><span></span><span></span></span>
+            </div>
+            <div class="indicator" data-indicator-path="seat_cooling.passenger_level" data-indicator-type="level" data-indicator-max="3">
+              <span class="indicator-icon">Cool P</span>
+              <span class="indicator-bars"><span></span><span></span><span></span></span>
+            </div>
+            <div class="indicator" data-indicator-path="wipers.mode">
+              <span class="indicator-icon">Wipers</span>
+              <span class="indicator-label" data-status-path="wipers.mode"></span>
+            </div>
           </div>
-          <div class="status-card">
-            <h3>Seat Heating</h3>
-            <div class="status-row">Driver <span data-status-path="seat_heating.driver_level"></span></div>
-            <div class="status-row">Passenger <span data-status-path="seat_heating.passenger_level"></span></div>
-          </div>
-          <div class="status-card">
-            <h3>Seat Cooling</h3>
-            <div class="status-row">Driver <span data-status-path="seat_cooling.driver_level"></span></div>
-            <div class="status-row">Passenger <span data-status-path="seat_cooling.passenger_level"></span></div>
-          </div>
-          <div class="status-card">
-            <h3>Traffic-Aware Cruise</h3>
-            <div class="status-row">Enabled <span data-status-path="tacc.enabled"></span></div>
-            <div class="status-row">Car Speed <span data-status-path="tacc.car_speed_kph"></span></div>
-            <div class="status-row">Follow Distance <span data-status-path="tacc.follow_distance"></span></div>
-          </div>
-          <div class="status-card">
-            <h3>Wipers</h3>
-            <div class="status-row">Mode <span data-status-path="wipers.mode"></span></div>
-            <div class="status-row">Frequency <span data-status-path="wipers.frequency_level"></span></div>
+
+          <div class="telemetry-grid">
+            <div class="telemetry-card">
+              <span class="telemetry-label">Outside Temp</span>
+              <span class="telemetry-value" data-telemetry-key="outside_temp"></span>
+            </div>
+            <div class="telemetry-card">
+              <span class="telemetry-label">Range</span>
+              <span class="telemetry-value" data-telemetry-key="range"></span>
+            </div>
+            <div class="telemetry-card">
+              <span class="telemetry-label">Fuel</span>
+              <span class="telemetry-value" data-telemetry-key="fuel"></span>
+            </div>
+            <div class="telemetry-card">
+              <span class="telemetry-label">Engine Temp</span>
+              <span class="telemetry-value" data-telemetry-key="engine_temp"></span>
+            </div>
+            <div class="telemetry-card">
+              <span class="telemetry-label">Trip</span>
+              <span class="telemetry-value" data-telemetry-key="trip"></span>
+            </div>
           </div>
         </div>
 
@@ -64,25 +117,39 @@
       <section class="panel display-panel">
         <h2>Infotainment Display</h2>
         <p class="panel-note">Entertainment-focused display with apps and media.</p>
-        <div class="status-grid">
-          <div class="status-card">
-            <h3>System</h3>
-            <div class="status-row">Power <span data-status-path="infotainment.power"></span></div>
-            <div class="status-row">Volume <span data-status-path="infotainment.volume"></span></div>
-            <div class="status-row">Active App <span data-status-path="infotainment.active_app"></span></div>
+
+        <div class="screen infotainment-screen">
+          <div class="infotainment-header">
+            <div class="infotainment-clock">
+              <span class="clock-time" data-telemetry-key="clock_time"></span>
+              <span class="clock-date" data-telemetry-key="clock_date"></span>
+            </div>
+            <div class="infotainment-status">
+              <div class="status-chip">Bluetooth <span data-status-path="infotainment.bluetooth_connected"></span></div>
+              <div class="status-chip">Cast <span data-status-path="infotainment.screencast_active"></span></div>
+              <div class="status-chip">Volume <span data-status-path="infotainment.volume"></span></div>
+              <div class="status-chip">Outside <span data-telemetry-key="outside_temp"></span></div>
+            </div>
           </div>
-          <div class="status-card">
-            <h3>Radio</h3>
-            <div class="status-row">Band <span data-status-path="infotainment.radio_band"></span></div>
-          </div>
-          <div class="status-card">
-            <h3>Connectivity</h3>
-            <div class="status-row">Bluetooth <span data-status-path="infotainment.bluetooth_connected"></span></div>
-            <div class="status-row">Screencast <span data-status-path="infotainment.screencast_active"></span></div>
-          </div>
-          <div class="status-card">
-            <h3>Local Games</h3>
-            <div class="status-row">Selected <span data-status-path="infotainment.local_game"></span></div>
+
+          <div class="infotainment-body">
+            <div class="app-grid" id="app-grid"></div>
+
+            <div class="infotainment-side">
+              <div class="now-playing">
+                <div id="now-art" class="now-art"></div>
+                <div class="now-meta">
+                  <div id="now-title" class="now-title">Ready</div>
+                  <div id="now-subtitle" class="now-subtitle">Select an app to begin.</div>
+                </div>
+              </div>
+              <div class="context-panel">
+                <div class="context-row">Active App <span data-status-path="infotainment.active_app"></span></div>
+                <div class="context-row">Radio Band <span data-status-path="infotainment.radio_band"></span></div>
+                <div class="context-row">Local Game <span data-status-path="infotainment.local_game"></span></div>
+                <div class="context-row">Power <span data-status-path="infotainment.power"></span></div>
+              </div>
+            </div>
           </div>
         </div>
 

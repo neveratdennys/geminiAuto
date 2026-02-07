@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from copy import deepcopy
+from datetime import datetime
+import math
+import time
 import json
 from typing import Any, Dict
 
@@ -205,6 +208,48 @@ def apply_update(state: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any
 CONTROLS = load_controls()
 CONTROL_MAP = build_control_map(CONTROLS)
 STATE = load_state()
+TELEMETRY_STATE = {
+    "last_ts": time.time(),
+    "trip_km": 12.4,
+    "odometer_km": 18420.7,
+    "fuel_level_pct": 72.0,
+}
+
+
+def compute_telemetry(state: Dict[str, Any]) -> Dict[str, Any]:
+    now = time.time()
+    last_ts = TELEMETRY_STATE.get("last_ts", now)
+    dt = max(0.0, now - last_ts)
+
+    speed_kph = float(state.get("tacc", {}).get("car_speed_kph", 0))
+    distance_km = speed_kph * dt / 3600.0
+
+    TELEMETRY_STATE["trip_km"] = TELEMETRY_STATE.get("trip_km", 0.0) + distance_km
+    TELEMETRY_STATE["odometer_km"] = (
+        TELEMETRY_STATE.get("odometer_km", 0.0) + distance_km
+    )
+
+    fuel_level = TELEMETRY_STATE.get("fuel_level_pct", 70.0)
+    fuel_level = max(0.0, fuel_level - distance_km * 0.25)
+    TELEMETRY_STATE["fuel_level_pct"] = fuel_level
+
+    outside_temp_c = 18 + 6 * math.sin(now / 900.0)
+    engine_temp_c = 70 + min(speed_kph, 120) * 0.25
+    range_km = fuel_level / 100.0 * 520
+
+    TELEMETRY_STATE["last_ts"] = now
+
+    return {
+        "timestamp": now,
+        "clock_time": datetime.now().strftime("%H:%M"),
+        "clock_date": datetime.now().strftime("%a %b %d"),
+        "outside_temp_c": round(outside_temp_c, 1),
+        "engine_temp_c": round(engine_temp_c, 1),
+        "range_km": round(range_km, 0),
+        "fuel_level_pct": round(fuel_level, 1),
+        "trip_km": round(TELEMETRY_STATE["trip_km"], 1),
+        "odometer_km": round(TELEMETRY_STATE["odometer_km"], 1),
+    }
 
 
 @app.route("/")
@@ -221,6 +266,11 @@ def get_controls():
 @app.get("/api/state")
 def get_state():
     return jsonify(STATE)
+
+
+@app.get("/api/telemetry")
+def get_telemetry():
+    return jsonify(compute_telemetry(STATE))
 
 
 @app.post("/api/state")

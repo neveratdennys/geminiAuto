@@ -2,6 +2,7 @@ let controlsList = [];
 let controlMap = {};
 let currentState = {};
 let controlsRegistry = { schema_version: 2, controls: [] };
+let currentTelemetry = {};
 
 const connectionStatus = document.getElementById("connection-status");
 
@@ -19,6 +20,10 @@ function toFahrenheit(celsius) {
 
 function toMph(kph) {
   return kph / 1.60934;
+}
+
+function toMiles(km) {
+  return km / 1.60934;
 }
 
 function formatControlValue(control, value) {
@@ -164,6 +169,7 @@ async function sendUpdate(control, rawValue) {
     const data = await response.json();
     currentState = data;
     renderAll();
+    loadTelemetry();
     setConnectionState(true);
   } catch (error) {
     setConnectionState(false);
@@ -290,6 +296,205 @@ function renderStatus(state) {
   });
 }
 
+function isIndicatorActive(value) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return value > 0;
+  }
+  if (typeof value === "string") {
+    return value !== "off" && value !== "none" && value !== "";
+  }
+  return false;
+}
+
+function renderIndicators(state) {
+  const indicatorElements = document.querySelectorAll("[data-indicator-path]");
+  indicatorElements.forEach((el) => {
+    const path = el.getAttribute("data-indicator-path");
+    const value = getStateValue(state, path);
+    const active = isIndicatorActive(value);
+    el.classList.toggle("active", active);
+
+    if (el.dataset.indicatorType === "level") {
+      const max = parseInt(el.dataset.indicatorMax || "0", 10);
+      const level = Math.min(max, parseInt(value || 0, 10));
+      const bars = el.querySelectorAll(".indicator-bars span");
+      bars.forEach((bar, index) => {
+        bar.classList.toggle("active", index < level);
+      });
+    }
+  });
+}
+
+function setGaugeValue(id, percent) {
+  const ring = document.querySelector(`[data-gauge="${id}"]`);
+  if (!ring) {
+    return;
+  }
+  const radius = ring.r.baseVal.value;
+  const circumference = 2 * Math.PI * radius;
+  ring.style.strokeDasharray = `${circumference}`;
+  ring.style.strokeDashoffset = `${circumference * (1 - percent)}`;
+}
+
+function renderSpeedGauge(state) {
+  const unitsSystem = state.units?.system || "metric";
+  const speedKph = getStateValue(state, "tacc.car_speed_kph") || 0;
+  const speed = unitsSystem === "imperial" ? Math.round(toMph(speedKph)) : Math.round(speedKph);
+  const maxSpeed = unitsSystem === "imperial" ? 120 : 200;
+  const percent = Math.min(speed / maxSpeed, 1);
+
+  setGaugeValue("speed", percent);
+
+  const speedValue = document.getElementById("speed-value");
+  const speedUnit = document.getElementById("speed-unit");
+  if (speedValue) {
+    speedValue.textContent = speed;
+  }
+  if (speedUnit) {
+    speedUnit.textContent = unitsSystem === "imperial" ? "mph" : "km/h";
+  }
+}
+
+function formatTelemetryValue(key, telemetry, unitsSystem) {
+  if (!telemetry) {
+    return "--";
+  }
+  if (key === "clock_time") {
+    return telemetry.clock_time || "--:--";
+  }
+  if (key === "clock_date") {
+    return telemetry.clock_date || "--";
+  }
+  if (key === "outside_temp") {
+    const tempC = telemetry.outside_temp_c ?? 0;
+    if (unitsSystem === "imperial") {
+      return `${Math.round(toFahrenheit(tempC))} F`;
+    }
+    return `${Math.round(tempC)} C`;
+  }
+  if (key === "engine_temp") {
+    const tempC = telemetry.engine_temp_c ?? 0;
+    if (unitsSystem === "imperial") {
+      return `${Math.round(toFahrenheit(tempC))} F`;
+    }
+    return `${Math.round(tempC)} C`;
+  }
+  if (key === "range") {
+    const rangeKm = telemetry.range_km ?? 0;
+    if (unitsSystem === "imperial") {
+      return `${Math.round(toMiles(rangeKm))} mi`;
+    }
+    return `${Math.round(rangeKm)} km`;
+  }
+  if (key === "trip") {
+    const tripKm = telemetry.trip_km ?? 0;
+    if (unitsSystem === "imperial") {
+      return `${toMiles(tripKm).toFixed(1)} mi`;
+    }
+    return `${tripKm.toFixed(1)} km`;
+  }
+  if (key === "odometer") {
+    const odoKm = telemetry.odometer_km ?? 0;
+    if (unitsSystem === "imperial") {
+      return `${Math.round(toMiles(odoKm))} mi`;
+    }
+    return `${Math.round(odoKm)} km`;
+  }
+  if (key === "fuel") {
+    const fuel = telemetry.fuel_level_pct ?? 0;
+    return `${fuel.toFixed(1)}%`;
+  }
+  return telemetry[key] ?? "--";
+}
+
+function renderTelemetry() {
+  const unitsSystem = currentState.units?.system || "metric";
+  const elements = document.querySelectorAll("[data-telemetry-key]");
+  elements.forEach((el) => {
+    const key = el.getAttribute("data-telemetry-key");
+    el.textContent = formatTelemetryValue(key, currentTelemetry, unitsSystem);
+  });
+}
+
+function renderAppGrid(state) {
+  const container = document.getElementById("app-grid");
+  if (!container) {
+    return;
+  }
+  const activeAppControl = controlsList.find(
+    (control) => control.path === "infotainment.active_app"
+  );
+  const apps = activeAppControl?.values || [];
+  container.innerHTML = "";
+
+  apps.forEach((appName) => {
+    const tile = document.createElement("button");
+    tile.type = "button";
+    tile.className = "app-tile";
+    tile.textContent = appName;
+    if (appName === state.infotainment?.active_app) {
+      tile.classList.add("active");
+    }
+    tile.addEventListener("click", () => {
+      if (activeAppControl) {
+        sendUpdate(activeAppControl, appName);
+      }
+    });
+    container.appendChild(tile);
+  });
+}
+
+function renderNowPlaying(state) {
+  const titleEl = document.getElementById("now-title");
+  const subtitleEl = document.getElementById("now-subtitle");
+  const artEl = document.getElementById("now-art");
+  if (!titleEl || !subtitleEl || !artEl) {
+    return;
+  }
+  const activeApp = state.infotainment?.active_app || "Radio";
+  const radioBand = state.infotainment?.radio_band || "FM";
+  const localGame = state.infotainment?.local_game || "Local Game";
+
+  const mapping = {
+    Radio: { title: `${radioBand} 101.5`, subtitle: "Synthwave Drive" },
+    Bluetooth: { title: "Driver Phone", subtitle: "Bluetooth Audio" },
+    Screencast: { title: "Phone Mirror", subtitle: "Screen sharing live" },
+    YouTube: { title: "Highway Review", subtitle: "Recommended for you" },
+    Netflix: { title: "Night Drive", subtitle: "Episode 3" },
+    Twitch: { title: "Sim Racing Live", subtitle: "Top streamer" },
+    "Game Streaming": { title: "Cloud Session", subtitle: "Launching game" },
+    "Local Games": { title: localGame, subtitle: "Installed on system" },
+    Navigation: { title: "Route Preview", subtitle: "12 min to destination" },
+    Podcasts: { title: "Auto Talk", subtitle: "Episode 42" },
+    Weather: { title: "Forecast", subtitle: "Light rain expected" },
+    "Other Apps": { title: "App Launcher", subtitle: "Browse apps" },
+  };
+
+  const selection = mapping[activeApp] || { title: activeApp, subtitle: "Ready" };
+  titleEl.textContent = selection.title;
+  subtitleEl.textContent = selection.subtitle;
+
+  const artPalette = {
+    Radio: "linear-gradient(135deg, #f59e0b, #f97316)",
+    Bluetooth: "linear-gradient(135deg, #22d3ee, #0ea5e9)",
+    Screencast: "linear-gradient(135deg, #c084fc, #6366f1)",
+    YouTube: "linear-gradient(135deg, #ef4444, #f97316)",
+    Netflix: "linear-gradient(135deg, #111827, #ef4444)",
+    Twitch: "linear-gradient(135deg, #a855f7, #7c3aed)",
+    "Game Streaming": "linear-gradient(135deg, #10b981, #22d3ee)",
+    "Local Games": "linear-gradient(135deg, #f97316, #84cc16)",
+    Navigation: "linear-gradient(135deg, #38bdf8, #22d3ee)",
+    Podcasts: "linear-gradient(135deg, #fb7185, #f43f5e)",
+    Weather: "linear-gradient(135deg, #60a5fa, #38bdf8)",
+    "Other Apps": "linear-gradient(135deg, #94a3b8, #64748b)",
+  };
+
+  artEl.style.background = artPalette[activeApp] || artPalette["Other Apps"];
+}
+
 function renderRegistry() {
   const registry = document.getElementById("controls-registry");
   registry.textContent = JSON.stringify(controlsRegistry, null, 2);
@@ -304,7 +509,22 @@ function renderAll() {
     "controls-entertainment"
   );
   renderStatus(currentState);
+  renderIndicators(currentState);
+  renderSpeedGauge(currentState);
+  renderAppGrid(currentState);
+  renderNowPlaying(currentState);
+  renderTelemetry();
   renderRegistry();
+}
+
+async function loadTelemetry() {
+  try {
+    const response = await fetch("/api/telemetry");
+    currentTelemetry = await response.json();
+    renderTelemetry();
+  } catch (error) {
+    // Ignore telemetry errors for now.
+  }
 }
 
 async function loadData() {
@@ -324,6 +544,8 @@ async function loadData() {
 
     renderAll();
     setConnectionState(true);
+    loadTelemetry();
+    setInterval(loadTelemetry, 2000);
   } catch (error) {
     setConnectionState(false);
   }
