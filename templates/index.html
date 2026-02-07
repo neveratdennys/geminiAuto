@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Car Dashboard Simulator</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div>
+        <p class="eyebrow">Simulator</p>
+        <h1>Car Dashboard</h1>
+        <p class="subtitle">Live controls plus a machine-readable registry for future LLM control.</p>
+      </div>
+      <div id="connection-status" class="connection-status">Loading...</div>
+    </header>
+
+    <main class="content">
+      <section class="panel display-panel">
+        <h2>Main Gauge Cluster</h2>
+        <p class="panel-note">Driving status and core vehicle systems.</p>
+        <div class="status-grid">
+          <div class="status-card">
+            <h3>Units</h3>
+            <div class="status-row">System <span data-status-path="units.system"></span></div>
+          </div>
+          <div class="status-card">
+            <h3>AC</h3>
+            <div class="status-row">Power <span data-status-path="ac.power"></span></div>
+            <div class="status-row">Temperature <span data-status-path="ac.temperature_c"></span></div>
+          </div>
+          <div class="status-card">
+            <h3>Seat Heating</h3>
+            <div class="status-row">Driver <span data-status-path="seat_heating.driver_level"></span></div>
+            <div class="status-row">Passenger <span data-status-path="seat_heating.passenger_level"></span></div>
+          </div>
+          <div class="status-card">
+            <h3>Seat Cooling</h3>
+            <div class="status-row">Driver <span data-status-path="seat_cooling.driver_level"></span></div>
+            <div class="status-row">Passenger <span data-status-path="seat_cooling.passenger_level"></span></div>
+          </div>
+          <div class="status-card">
+            <h3>Traffic-Aware Cruise</h3>
+            <div class="status-row">Enabled <span data-status-path="tacc.enabled"></span></div>
+            <div class="status-row">Car Speed <span data-status-path="tacc.car_speed_kph"></span></div>
+            <div class="status-row">Follow Distance <span data-status-path="tacc.follow_distance"></span></div>
+          </div>
+          <div class="status-card">
+            <h3>Wipers</h3>
+            <div class="status-row">Mode <span data-status-path="wipers.mode"></span></div>
+            <div class="status-row">Frequency <span data-status-path="wipers.frequency_level"></span></div>
+          </div>
+        </div>
+
+        <div class="controls-block">
+          <h3>Controls</h3>
+          <p class="panel-note">Interactive controls tied to the gauge cluster.</p>
+          <div id="controls-driving"></div>
+        </div>
+      </section>
+
+      <section class="panel display-panel">
+        <h2>Infotainment Display</h2>
+        <p class="panel-note">Entertainment-focused display with apps and media.</p>
+        <div class="status-grid">
+          <div class="status-card">
+            <h3>System</h3>
+            <div class="status-row">Power <span data-status-path="infotainment.power"></span></div>
+            <div class="status-row">Volume <span data-status-path="infotainment.volume"></span></div>
+            <div class="status-row">Active App <span data-status-path="infotainment.active_app"></span></div>
+          </div>
+          <div class="status-card">
+            <h3>Radio</h3>
+            <div class="status-row">Band <span data-status-path="infotainment.radio_band"></span></div>
+          </div>
+          <div class="status-card">
+            <h3>Connectivity</h3>
+            <div class="status-row">Bluetooth <span data-status-path="infotainment.bluetooth_connected"></span></div>
+            <div class="status-row">Screencast <span data-status-path="infotainment.screencast_active"></span></div>
+          </div>
+          <div class="status-card">
+            <h3>Local Games</h3>
+            <div class="status-row">Selected <span data-status-path="infotainment.local_game"></span></div>
+          </div>
+        </div>
+
+        <div class="controls-block">
+          <h3>Controls</h3>
+          <p class="panel-note">Interactive controls tied to the infotainment screen.</p>
+          <div id="controls-entertainment"></div>
+        </div>
+      </section>
+
+      <section class="panel registry-panel full-span">
+        <h2>Controls Registry</h2>
+        <p class="panel-note">Copy this JSON into LLM context to describe available controls.</p>
+        <pre id="controls-registry" class="registry"></pre>
+      </section>
+    </main>
+  </div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+{
+  "units": {
+    "system": "metric"
+  },
+  "ac": {
+    "power": false,
+    "temperature_c": 22,
+    "temperature_f": 65
+  },
+  "seat_heating": {
+    "driver_level": 0,
+    "passenger_level": 0
+  },
+  "seat_cooling": {
+    "driver_level": 0,
+    "passenger_level": 0
+  },
+  "tacc": {
+    "enabled": false,
+    "car_speed_kph": 88,
+    "follow_distance": 1,
+    "car_speed_mph": 50
+  },
+  "wipers": {
+    "mode": "auto",
+    "frequency_level": 1
+  },
+  "infotainment": {
+    "power": true,
+    "volume": 18,
+    "active_app": "Local Games",
+    "radio_band": "FM",
+    "bluetooth_connected": false,
+    "screencast_active": false,
+    "local_game": "League of Legends"
+  }
+}
