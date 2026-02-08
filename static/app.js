@@ -5,6 +5,7 @@ let controlsRegistry = { schema_version: 2, controls: [] };
 let currentTelemetry = {};
 let assistantHistory = [];
 const MAX_ASSISTANT_HISTORY = 10;
+let indicatorInteractionsReady = false;
 
 const connectionStatus = document.getElementById("connection-status");
 const assistantMessages = document.getElementById("assistant-messages");
@@ -14,9 +15,12 @@ const assistantStatus = document.getElementById("assistant-status");
 const assistantProvider = document.getElementById("assistant-provider");
 const assistantVoiceInput = document.getElementById("assistant-voice-input");
 const assistantVoiceOutput = document.getElementById("assistant-voice-output");
+const toggleDetailsButton = document.getElementById("toggle-details");
+const resetStateButton = document.getElementById("reset-state");
 
 let speechRecognition = null;
 let isListening = false;
+const DETAILS_STORAGE_KEY = "dashboard.details_visible";
 
 function buildControlMap(controls) {
   const map = {};
@@ -174,6 +178,57 @@ function setAssistantStatus(message) {
   if (assistantStatus) {
     assistantStatus.textContent = message;
   }
+}
+
+function setDetailsVisibility(isVisible) {
+  document.body.classList.toggle("details-hidden", !isVisible);
+  if (toggleDetailsButton) {
+    toggleDetailsButton.textContent = isVisible ? "Hide Details" : "Show Details";
+    toggleDetailsButton.setAttribute("aria-pressed", isVisible ? "true" : "false");
+  }
+}
+
+function initDetailsToggle() {
+  if (!toggleDetailsButton) {
+    return;
+  }
+  const stored = localStorage.getItem(DETAILS_STORAGE_KEY);
+  const isVisible = stored === null ? true : stored === "true";
+  setDetailsVisibility(isVisible);
+
+  toggleDetailsButton.addEventListener("click", () => {
+    const currentlyHidden = document.body.classList.contains("details-hidden");
+    const nextVisible = currentlyHidden;
+    setDetailsVisibility(nextVisible);
+    localStorage.setItem(DETAILS_STORAGE_KEY, String(nextVisible));
+  });
+}
+
+function initResetButton() {
+  if (!resetStateButton) {
+    return;
+  }
+  resetStateButton.addEventListener("click", async () => {
+    resetStateButton.disabled = true;
+    const originalLabel = resetStateButton.textContent;
+    resetStateButton.textContent = "Resetting...";
+    try {
+      const response = await fetch("/api/reset", { method: "POST" });
+      if (!response.ok) {
+        throw new Error("Reset failed.");
+      }
+      const data = await response.json();
+      currentState = data;
+      renderAll();
+      loadTelemetry();
+      setConnectionState(true);
+    } catch (error) {
+      setConnectionState(false);
+    } finally {
+      resetStateButton.disabled = false;
+      resetStateButton.textContent = originalLabel;
+    }
+  });
 }
 
 function renderAssistantMessages() {
@@ -490,6 +545,7 @@ function renderIndicators(state) {
     const value = getStateValue(state, path);
     const active = isIndicatorActive(value);
     el.classList.toggle("active", active);
+    el.setAttribute("aria-pressed", active ? "true" : "false");
 
     if (el.dataset.indicatorType === "level") {
       const max = parseInt(el.dataset.indicatorMax || "0", 10);
@@ -529,6 +585,17 @@ function renderSpeedGauge(state) {
   }
   if (speedUnit) {
     speedUnit.textContent = unitsSystem === "imperial" ? "mph" : "km/h";
+  }
+}
+
+function renderFuelGauge() {
+  const fuel = currentTelemetry?.fuel_level_pct;
+  const percent = fuel !== undefined ? clamp(fuel / 100, 0, 1) : 0;
+  setGaugeValue("fuel", percent);
+
+  const fuelValue = document.getElementById("fuel-value");
+  if (fuelValue) {
+    fuelValue.textContent = fuel !== undefined ? Math.round(fuel) : "--";
   }
 }
 
@@ -591,6 +658,128 @@ function renderTelemetry() {
     const key = el.getAttribute("data-telemetry-key");
     el.textContent = formatTelemetryValue(key, currentTelemetry, unitsSystem);
   });
+}
+
+function getNextIndicatorValue(control, currentValue) {
+  if (!control) {
+    return null;
+  }
+  if (control.type === "toggle") {
+    return !Boolean(currentValue);
+  }
+  if (control.type === "select") {
+    const values = control.values || [];
+    if (!values.length) {
+      return null;
+    }
+    const currentIndex = values.indexOf(currentValue);
+    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % values.length;
+    return values[nextIndex];
+  }
+  if (control.type === "slider") {
+    const min = control.min ?? 0;
+    const max = control.max ?? min;
+    const step = control.step ?? 1;
+    const numericValue = typeof currentValue === "number" ? currentValue : parseInt(currentValue || min, 10);
+    const nextValue = numericValue + step;
+    return nextValue > max ? min : nextValue;
+  }
+  return null;
+}
+
+function handleIndicatorActivate(indicator) {
+  const path = indicator.getAttribute("data-indicator-path");
+  if (!path) {
+    return;
+  }
+  const control = controlMap[path];
+  if (!control) {
+    return;
+  }
+  const currentValue = getStateValue(currentState, path);
+  const nextValue = getNextIndicatorValue(control, currentValue);
+  if (nextValue === null || nextValue === undefined) {
+    return;
+  }
+  sendUpdate(control, nextValue);
+}
+
+function setupIndicatorInteractions() {
+  if (indicatorInteractionsReady) {
+    return;
+  }
+  indicatorInteractionsReady = true;
+
+  const indicators = document.querySelectorAll(".indicator");
+  indicators.forEach((indicator) => {
+    const path = indicator.getAttribute("data-indicator-path");
+    if (!path || !controlMap[path]) {
+      return;
+    }
+    indicator.setAttribute("role", "button");
+    indicator.setAttribute("tabindex", "0");
+  });
+
+  document.addEventListener("click", (event) => {
+    const indicator = event.target.closest(".indicator");
+    if (!indicator) {
+      return;
+    }
+    if (!indicator.getAttribute("data-indicator-path")) {
+      return;
+    }
+    handleIndicatorActivate(indicator);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+    const focused = document.activeElement;
+    const indicator = focused?.closest?.(".indicator");
+    if (!indicator) {
+      return;
+    }
+    event.preventDefault();
+    handleIndicatorActivate(indicator);
+  });
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function updateAmbientScene() {
+  const speedKph = getStateValue(currentState, "tacc.car_speed_kph") || 0;
+  const speedRatio = clamp(speedKph / 150, 0, 1);
+  const roadSpeed = Math.max(2.2, 7 - speedRatio * 4.5);
+
+  const outsideTemp = currentTelemetry.outside_temp_c ?? 18;
+  const tempRatio = clamp((outsideTemp - 5) / 30, 0, 1);
+  const tempHue = Math.round(210 - 190 * tempRatio);
+  const tempLight = `${Math.round(14 + tempRatio * 10)}%`;
+
+  const wiperMode = getStateValue(currentState, "wipers.mode") || "auto";
+  const wiperLevel = getStateValue(currentState, "wipers.frequency_level") || 1;
+  const rainBase = wiperMode === "manual" ? wiperLevel / 5 : wiperMode === "auto" ? 0.6 : 0;
+  const rainIntensity = clamp(rainBase, 0, 1);
+
+  const acPower = Boolean(getStateValue(currentState, "ac.power"));
+  const acTemp = getStateValue(currentState, "ac.temperature_c") ?? 22;
+  const acDelta = outsideTemp - acTemp;
+  const windIntensity = acPower ? clamp(Math.abs(acDelta) / 10, 0, 1) : 0;
+  const windHue = acDelta >= 0 ? 200 : 20;
+  const windSpeed = Math.max(2.5, 8 - windIntensity * 5);
+
+  const root = document.documentElement;
+  root.style.setProperty("--speed-intensity", speedRatio.toFixed(2));
+  root.style.setProperty("--rain-intensity", rainIntensity.toFixed(2));
+  root.style.setProperty("--temp-hue", `${tempHue}`);
+  root.style.setProperty("--temp-light", tempLight);
+  root.style.setProperty("--wind-intensity", windIntensity.toFixed(2));
+  root.style.setProperty("--wind-hue", `${windHue}`);
+  root.style.setProperty("--wind-speed", `${windSpeed}s`);
+  root.style.setProperty("--road-speed", `${roadSpeed}s`);
 }
 
 function renderAppGrid(state) {
@@ -685,10 +874,12 @@ function renderAll() {
   renderStatus(currentState);
   renderIndicators(currentState);
   renderSpeedGauge(currentState);
+  renderFuelGauge();
   renderAppGrid(currentState);
   renderNowPlaying(currentState);
   renderTelemetry();
   renderRegistry();
+  updateAmbientScene();
 }
 
 async function loadTelemetry() {
@@ -696,6 +887,8 @@ async function loadTelemetry() {
     const response = await fetch("/api/telemetry");
     currentTelemetry = await response.json();
     renderTelemetry();
+    renderFuelGauge();
+    updateAmbientScene();
   } catch (error) {
     // Ignore telemetry errors for now.
   }
@@ -717,6 +910,9 @@ async function loadData() {
     currentState = stateData;
 
     renderAll();
+    setupIndicatorInteractions();
+    initDetailsToggle();
+    initResetButton();
     setConnectionState(true);
     loadTelemetry();
     setInterval(loadTelemetry, 2000);

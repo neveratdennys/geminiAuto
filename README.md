@@ -17,12 +17,14 @@ A lightweight Python + Flask dashboard simulator with explicit controls and a ma
 - State endpoint: `GET /api/state`
 - Telemetry endpoint: `GET /api/telemetry` (derived simulation values)
 - Update endpoint: `POST /api/state` (JSON patch by control path)
+- Reset endpoint: `POST /api/reset` (restore default state and telemetry)
 - Units: internal state is metric; `units.system` toggles metric/imperial display and exposes F/mph input controls.
 
-Example update:
+Example update (include `X-API-Key` if enabled):
 ```bash
 curl -X POST http://127.0.0.1:5000/api/state \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_KEY" \
   -d '{"ac":{"power":true},"tacc":{"car_speed_kph":110}}'
 ```
 
@@ -31,6 +33,13 @@ curl -X POST http://127.0.0.1:5000/api/state \
 - Azure: set `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`, optional `AZURE_OPENAI_API_VERSION`.
 - Endpoint: `POST /api/assistant` with `"provider": "google"` or `"provider": "azure"`.
 - Voice: the UI uses the browser Web Speech API for voice input/output and may require HTTPS and mic permissions.
+
+**Ambient UI**
+- Ambient background responds to speed, weather, and temperature; AC airflow has a subtle wind overlay.
+
+**API Access Control (Optional)**
+- Set `DASHBOARD_API_KEY` to require an API key for `POST /api/state`, `POST /api/reset`, and `POST /api/assistant`.
+- Send the key via `X-API-Key: YOUR_KEY` or `Authorization: Bearer YOUR_KEY`.
 
 Example request:
 ```bash

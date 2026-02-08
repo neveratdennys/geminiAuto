@@ -4,8 +4,7 @@
   },
   "ac": {
     "power": true,
-    "temperature_c": 20,
-    "temperature_f": 65
+    "temperature_c": 22
   },
   "seat_heating": {
     "driver_level": 0,
@@ -16,10 +15,9 @@
     "passenger_level": 0
   },
   "tacc": {
-    "enabled": false,
-    "car_speed_kph": 50,
-    "follow_distance": 1,
-    "car_speed_mph": 50
+    "enabled": true,
+    "car_speed_kph": 64,
+    "follow_distance": 1
   },
   "wipers": {
     "mode": "manual",
@@ -27,11 +25,11 @@
   },
   "infotainment": {
     "power": true,
-    "volume": 12,
-    "active_app": "Weather",
+    "volume": 10,
+    "active_app": "Radio",
     "radio_band": "FM",
     "bluetooth_connected": false,
     "screencast_active": false,
-    "local_game": "Elden Ring"
+    "local_game": "Counter Strike 2"
   }
 }
