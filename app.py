@@ -34,6 +34,28 @@ DEFAULT_STATE: Dict[str, Any] = {
     },
 }
 
+
+def get_api_key() -> Optional[str]:
+    return os.environ.get("DASHBOARD_API_KEY")
+
+
+def authorize_request() -> bool:
+    api_key = get_api_key()
+    if not api_key:
+        return True
+    header_key = request.headers.get("X-API-Key")
+    if header_key and header_key == api_key:
+        return True
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        return auth_header.split(" ", 1)[1] == api_key
+    return False
+
+
+def unauthorized_response():
+    return jsonify({"error": "Unauthorized"}), 401
+
+
 app = Flask(__name__)
 ASSISTANT_MAX_HISTORY = 10
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3")
@@ -54,7 +76,7 @@ ASSISTANT_PROMPT_CONFIG = {
     "interaction_rules": [
         "Only use the controls listed below.",
         "If a request is outside the list, explain what is available.",
-        "When a request is ambiguous, ask a short clarifying question and do not apply changes.",
+        "When a request is ambiguous, apply the change that is most likely intended. Please make your best judgement in situations such as turning off seat heating when seat cooling is being turned on",
         "Respond with JSON only using the specified schema.",
     ],
     "output_schema": '{ "reply": "...", "updates": { ... } }',
@@ -421,6 +443,31 @@ def set_in_state(state: Dict[str, Any], path: str, value: Any) -> None:
     current[parts[-1]] = value
 
 
+def delete_in_state(state: Dict[str, Any], path: str) -> bool:
+    parts = path.split(".")
+    current: Dict[str, Any] = state
+    for part in parts[:-1]:
+        if part not in current or not isinstance(current[part], dict):
+            return False
+        current = current[part]
+    if parts[-1] in current:
+        del current[parts[-1]]
+        return True
+    return False
+
+
+def prune_mapped_state_entries(
+    state: Dict[str, Any], controls: Dict[str, Any]
+) -> bool:
+    changed = False
+    for control in controls.get("controls", []):
+        path = control.get("path")
+        maps_to = control.get("maps_to")
+        if path and maps_to:
+            changed = delete_in_state(state, path) or changed
+    return changed
+
+
 def apply_update(state: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
     updates = flatten_update(update)
     for path, value in updates.items():
@@ -435,19 +482,33 @@ def apply_update(state: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any
             converted = int(round(converted))
         target_path = control.get("maps_to", path)
         set_in_state(state, target_path, converted)
+    prune_mapped_state_entries(state, CONTROLS)
     write_json(STATE_PATH, state)
     return state
 
 
 CONTROLS = load_controls()
 CONTROL_MAP = build_control_map(CONTROLS)
+
+
+def build_default_telemetry_state() -> Dict[str, float]:
+    return {
+        "last_ts": time.time(),
+        "trip_km": 12.4,
+        "odometer_km": 18420.7,
+        "fuel_level_pct": 72.0,
+    }
+
+
+def reset_telemetry_state() -> None:
+    TELEMETRY_STATE.clear()
+    TELEMETRY_STATE.update(build_default_telemetry_state())
+
+
 STATE = load_state()
-TELEMETRY_STATE = {
-    "last_ts": time.time(),
-    "trip_km": 12.4,
-    "odometer_km": 18420.7,
-    "fuel_level_pct": 72.0,
-}
+if prune_mapped_state_entries(STATE, CONTROLS):
+    write_json(STATE_PATH, STATE)
+TELEMETRY_STATE = build_default_telemetry_state()
 
 
 def compute_telemetry(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -510,6 +571,8 @@ def get_telemetry():
 @app.post("/api/state")
 def update_state():
     refresh_controls()
+    if not authorize_request():
+        return unauthorized_response()
     payload = request.get_json(silent=True) or {}
     if not isinstance(payload, dict):
         payload = {}
@@ -517,9 +580,22 @@ def update_state():
     return jsonify(updated)
 
 
+@app.post("/api/reset")
+def reset_state():
+    global STATE
+    if not authorize_request():
+        return unauthorized_response()
+    STATE = deepcopy(DEFAULT_STATE)
+    write_json(STATE_PATH, STATE)
+    reset_telemetry_state()
+    return jsonify(STATE)
+
+
 @app.post("/api/assistant")
 def assistant():
     refresh_controls()
+    if not authorize_request():
+        return unauthorized_response()
     payload = request.get_json(silent=True) or {}
     if not isinstance(payload, dict):
         payload = {}
@@ -572,4 +648,5 @@ def assistant():
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", "5000"))
+    app.run(host="0.0.0.0", port=port, debug=False)
