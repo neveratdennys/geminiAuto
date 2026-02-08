@@ -58,7 +58,10 @@ def unauthorized_response():
 
 app = Flask(__name__)
 ASSISTANT_MAX_HISTORY = 10
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
+LLM_RATE_LIMIT_RPM = int(os.environ.get("LLM_RATE_LIMIT_RPM", "5"))
+LLM_RATE_LIMIT_WINDOW = 60.0
+LLM_REQUEST_LOG: Dict[str, List[float]] = {}
 DEFAULT_GEMINI_ENDPOINT = (
     "https://generativelanguage.googleapis.com/v1beta/models"
 )
@@ -153,6 +156,28 @@ def build_control_map(controls: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
 
 def get_google_api_key() -> Optional[str]:
     return os.environ.get("GEMINI_API_KEY")
+
+
+def get_client_id() -> str:
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.remote_addr or "unknown"
+
+
+def check_rate_limit(client_id: str) -> Tuple[bool, int]:
+    if LLM_RATE_LIMIT_RPM <= 0:
+        return True, 0
+    now = time.time()
+    window_start = now - LLM_RATE_LIMIT_WINDOW
+    timestamps = [ts for ts in LLM_REQUEST_LOG.get(client_id, []) if ts >= window_start]
+    if len(timestamps) >= LLM_RATE_LIMIT_RPM:
+        retry_after = int(math.ceil(LLM_RATE_LIMIT_WINDOW - (now - min(timestamps))))
+        LLM_REQUEST_LOG[client_id] = timestamps
+        return False, max(retry_after, 1)
+    timestamps.append(now)
+    LLM_REQUEST_LOG[client_id] = timestamps
+    return True, 0
 
 
 def summarize_controls(controls: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -256,9 +281,12 @@ def build_azure_messages(
 
 
 def call_google_gemini(
-    message: str, history: List[Dict[str, str]], system_prompt: str
+    message: str,
+    history: List[Dict[str, str]],
+    system_prompt: str,
+    api_key_override: Optional[str] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
-    api_key = get_google_api_key()
+    api_key = api_key_override or get_google_api_key()
     if not api_key:
         return (
             None,
@@ -295,9 +323,12 @@ def call_google_gemini(
 
 
 def call_azure_openai(
-    message: str, history: List[Dict[str, str]], system_prompt: str
+    message: str,
+    history: List[Dict[str, str]],
+    system_prompt: str,
+    api_key_override: Optional[str] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
-    api_key = os.environ.get("AZURE_OPENAI_API_KEY")
+    api_key = api_key_override or os.environ.get("AZURE_OPENAI_API_KEY")
     endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
     deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT")
     api_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
@@ -608,12 +639,33 @@ def assistant():
     history = normalize_history(payload.get("history"))
 
     provider = str(payload.get("provider") or "google").strip().lower()
+    api_key_override = payload.get("api_key")
+    if not isinstance(api_key_override, str) or not api_key_override.strip():
+        api_key_override = None
+    else:
+        api_key_override = api_key_override.strip()
+
+    client_id = get_client_id()
+    allowed, retry_after = check_rate_limit(client_id)
+    if not allowed:
+        response = jsonify(
+            {
+                "error": "Rate limit exceeded. Try again soon.",
+                "retry_after": retry_after,
+            }
+        )
+        response.headers["Retry-After"] = str(retry_after)
+        return response, 429
 
     system_prompt = build_assistant_system_prompt(CONTROLS, STATE)
     if provider == "google":
-        response_text, error = call_google_gemini(message, history, system_prompt)
+        response_text, error = call_google_gemini(
+            message, history, system_prompt, api_key_override
+        )
     elif provider == "azure":
-        response_text, error = call_azure_openai(message, history, system_prompt)
+        response_text, error = call_azure_openai(
+            message, history, system_prompt, api_key_override
+        )
     else:
         return jsonify({"error": f"Unknown provider: {provider}"}), 400
 

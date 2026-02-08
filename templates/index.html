@@ -214,6 +214,29 @@
             <button class="assistant-send" type="submit">Send</button>
           </form>
           <div id="assistant-status" class="assistant-status"></div>
+          <div class="assistant-credentials">
+            <div class="assistant-credentials-header">
+              <label for="assistant-api-key">API key override</label>
+              <div class="assistant-credentials-actions">
+                <button id="assistant-api-key-toggle" class="assistant-credentials-button" type="button">
+                  Show
+                </button>
+                <button id="assistant-api-key-clear" class="assistant-credentials-button ghost" type="button">
+                  Clear
+                </button>
+              </div>
+            </div>
+            <input
+              id="assistant-api-key"
+              class="assistant-input"
+              type="password"
+              placeholder="Optional: use your own key"
+              autocomplete="off"
+            />
+            <div class="assistant-credentials-note">
+              Stored locally in this browser and sent only with assistant requests.
+            </div>
+          </div>
         </div>
       </section>
 

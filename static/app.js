@@ -17,10 +17,14 @@ const assistantVoiceInput = document.getElementById("assistant-voice-input");
 const assistantVoiceOutput = document.getElementById("assistant-voice-output");
 const toggleDetailsButton = document.getElementById("toggle-details");
 const resetStateButton = document.getElementById("reset-state");
+const assistantApiKey = document.getElementById("assistant-api-key");
+const assistantApiKeyToggle = document.getElementById("assistant-api-key-toggle");
+const assistantApiKeyClear = document.getElementById("assistant-api-key-clear");
 
 let speechRecognition = null;
 let isListening = false;
 const DETAILS_STORAGE_KEY = "dashboard.details_visible";
+const API_KEY_STORAGE_KEY = "assistant.api_key_override";
 
 function buildControlMap(controls) {
   const map = {};
@@ -180,6 +184,43 @@ function setAssistantStatus(message) {
   }
 }
 
+function initAssistantApiKey() {
+  if (!assistantApiKey) {
+    return;
+  }
+  const stored = localStorage.getItem(API_KEY_STORAGE_KEY);
+  if (stored) {
+    assistantApiKey.value = stored;
+  }
+  assistantApiKey.addEventListener("input", () => {
+    const value = assistantApiKey.value.trim();
+    if (value) {
+      localStorage.setItem(API_KEY_STORAGE_KEY, value);
+    } else {
+      localStorage.removeItem(API_KEY_STORAGE_KEY);
+    }
+  });
+
+  if (assistantApiKeyToggle) {
+    assistantApiKeyToggle.addEventListener("click", () => {
+      const isHidden = assistantApiKey.type === "password";
+      assistantApiKey.type = isHidden ? "text" : "password";
+      assistantApiKeyToggle.textContent = isHidden ? "Hide" : "Show";
+    });
+  }
+
+  if (assistantApiKeyClear) {
+    assistantApiKeyClear.addEventListener("click", () => {
+      assistantApiKey.value = "";
+      localStorage.removeItem(API_KEY_STORAGE_KEY);
+      assistantApiKey.type = "password";
+      if (assistantApiKeyToggle) {
+        assistantApiKeyToggle.textContent = "Show";
+      }
+    });
+  }
+}
+
 function setDetailsVisibility(isVisible) {
   document.body.classList.toggle("details-hidden", !isVisible);
   if (toggleDetailsButton) {
@@ -275,6 +316,7 @@ async function sendAssistantMessage(message) {
   if (!trimmed) {
     return;
   }
+  const apiKeyOverride = assistantApiKey?.value?.trim();
   pushAssistantMessage("user", trimmed);
   if (assistantInput) {
     assistantInput.value = "";
@@ -288,6 +330,7 @@ async function sendAssistantMessage(message) {
         message: trimmed,
         history: assistantHistory,
         provider: assistantProvider?.value || "google",
+        api_key: apiKeyOverride || undefined,
       }),
     });
     const data = await response.json();
@@ -913,6 +956,7 @@ async function loadData() {
     setupIndicatorInteractions();
     initDetailsToggle();
     initResetButton();
+    initAssistantApiKey();
     setConnectionState(true);
     loadTelemetry();
     setInterval(loadTelemetry, 2000);
