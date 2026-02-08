@@ -7,7 +7,7 @@ A lightweight Python + Flask dashboard simulator with explicit controls and a ma
 2. `source .venv/bin/activate` (Windows: `.venv\Scripts\activate`)
 3. `pip install -r requirements.txt`
 4. `export GEMINI_API_KEY="YOUR_KEY"` (Windows PowerShell: `$env:GEMINI_API_KEY="YOUR_KEY"`)
-5. `export GEMINI_MODEL="gemini-3"` (optional)
+5. `export GEMINI_MODEL="gemini-3-flash-preview"` (optional)
 6. `python app.py`
 7. Open `http://127.0.0.1:5000`
 
@@ -33,6 +33,8 @@ curl -X POST http://127.0.0.1:5000/api/state \
 - Azure: set `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`, optional `AZURE_OPENAI_API_VERSION`.
 - Endpoint: `POST /api/assistant` with `"provider": "google"` or `"provider": "azure"`.
 - Voice: the UI uses the browser Web Speech API for voice input/output and may require HTTPS and mic permissions.
+- Rate limit: 5 requests per minute by default (`LLM_RATE_LIMIT_RPM` to override).
+- UI tokens: the assistant panel lets users store an API key locally and send it with assistant requests to override server env keys.
 
 **Ambient UI**
 - Ambient background responds to speed, weather, and temperature; AC airflow has a subtle wind overlay.

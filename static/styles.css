@@ -933,6 +933,63 @@ h1 {
   min-height: 16px;
 }
 
+.assistant-credentials {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.assistant-credentials-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.assistant-credentials label {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 11px;
+}
+
+.assistant-credentials-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.assistant-credentials-button {
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(9, 15, 26, 0.6);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+
+.assistant-credentials-button.ghost {
+  border-color: rgba(148, 163, 184, 0.35);
+  background: transparent;
+}
+
+.assistant-credentials-button:focus-visible {
+  outline: 2px solid rgba(103, 232, 249, 0.6);
+  outline-offset: 2px;
+}
+
+.assistant-credentials-button:active {
+  transform: translateY(1px);
+}
+
+.assistant-credentials-note {
+  font-size: 11px;
+  color: rgba(148, 163, 184, 0.7);
+}
+
 .registry {
   max-height: 280px;
   overflow: auto;
