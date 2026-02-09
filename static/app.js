@@ -20,11 +20,14 @@ const resetStateButton = document.getElementById("reset-state");
 const assistantApiKey = document.getElementById("assistant-api-key");
 const assistantApiKeyToggle = document.getElementById("assistant-api-key-toggle");
 const assistantApiKeyClear = document.getElementById("assistant-api-key-clear");
+const assistantTimeline = document.getElementById("assistant-timeline");
 
 let speechRecognition = null;
 let isListening = false;
 const DETAILS_STORAGE_KEY = "dashboard.details_visible";
 const API_KEY_STORAGE_KEY = "assistant.api_key_override";
+const MAX_TIMELINE_EVENTS = 25;
+let timelineEvents = [];
 
 function buildControlMap(controls) {
   const map = {};
@@ -184,6 +187,82 @@ function setAssistantStatus(message) {
   }
 }
 
+function formatTimelineTime(date = new Date()) {
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function shortenTimelineText(text, maxLength = 160) {
+  if (!text) {
+    return "";
+  }
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return `${text.slice(0, maxLength - 3)}...`;
+}
+
+function renderTimeline() {
+  if (!assistantTimeline) {
+    return;
+  }
+  assistantTimeline.innerHTML = "";
+  timelineEvents.forEach((event) => {
+    const item = document.createElement("div");
+    item.className = "timeline-item";
+
+    const timeEl = document.createElement("div");
+    timeEl.className = "timeline-time";
+    timeEl.textContent = event.time;
+
+    const content = document.createElement("div");
+    content.className = "timeline-content";
+
+    const labelEl = document.createElement("div");
+    labelEl.className = "timeline-label";
+    labelEl.textContent = event.label;
+
+    const detailEl = document.createElement("div");
+    detailEl.className = "timeline-detail";
+    detailEl.textContent = event.detail;
+
+    content.appendChild(labelEl);
+    content.appendChild(detailEl);
+    item.appendChild(timeEl);
+    item.appendChild(content);
+    assistantTimeline.appendChild(item);
+  });
+}
+
+function pushTimelineEvent(label, detail) {
+  if (!assistantTimeline) {
+    return;
+  }
+  timelineEvents.unshift({
+    time: formatTimelineTime(),
+    label,
+    detail: shortenTimelineText(detail),
+  });
+  if (timelineEvents.length > MAX_TIMELINE_EVENTS) {
+    timelineEvents = timelineEvents.slice(0, MAX_TIMELINE_EVENTS);
+  }
+  renderTimeline();
+}
+
+function flattenUpdateForTimeline(payload, prefix = "", output = {}) {
+  if (!payload || typeof payload !== "object") {
+    return output;
+  }
+  Object.entries(payload).forEach(([key, value]) => {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      flattenUpdateForTimeline(value, path, output);
+    } else {
+      output[path] = value;
+    }
+  });
+  return output;
+}
+
 function initAssistantApiKey() {
   if (!assistantApiKey) {
     return;
@@ -263,7 +342,9 @@ function initResetButton() {
       renderAll();
       loadTelemetry();
       setConnectionState(true);
+      pushTimelineEvent("Reset", "State restored to defaults.");
     } catch (error) {
+      pushTimelineEvent("Error", "Reset failed.");
       setConnectionState(false);
     } finally {
       resetStateButton.disabled = false;
@@ -317,6 +398,7 @@ async function sendAssistantMessage(message) {
     return;
   }
   const apiKeyOverride = assistantApiKey?.value?.trim();
+  pushTimelineEvent("User", trimmed);
   pushAssistantMessage("user", trimmed);
   if (assistantInput) {
     assistantInput.value = "";
@@ -338,11 +420,19 @@ async function sendAssistantMessage(message) {
       throw new Error(data.error || "Assistant error.");
     }
     pushAssistantMessage("assistant", data.reply || "Ready for the next request.");
+    pushTimelineEvent("Assistant", data.reply || "Ready for the next request.");
     speakAssistantReply(data.reply || "Ready for the next request.");
     if (data.state) {
       currentState = data.state;
       renderAll();
       loadTelemetry();
+    }
+    if (data.updates && Object.keys(data.updates).length) {
+      const flattened = flattenUpdateForTimeline(data.updates);
+      const updateText = Object.entries(flattened)
+        .map(([path, value]) => `${path}: ${JSON.stringify(value)}`)
+        .join(", ");
+      pushTimelineEvent("Updates", updateText);
     }
     setAssistantStatus("");
   } catch (error) {
@@ -350,6 +440,7 @@ async function sendAssistantMessage(message) {
       "assistant",
       `Sorry, I couldn't reach the assistant. ${error.message}`
     );
+    pushTimelineEvent("Error", `Assistant request failed. ${error.message}`);
     speakAssistantReply(
       `Sorry, I couldn't reach the assistant. ${error.message}`
     );
@@ -443,7 +534,10 @@ async function sendUpdate(control, rawValue) {
     renderAll();
     loadTelemetry();
     setConnectionState(true);
+    const formattedValue = formatControlValue(control, rawValue);
+    pushTimelineEvent("Control", `${control.label} -> ${formattedValue}`);
   } catch (error) {
+    pushTimelineEvent("Error", "Control update failed.");
     setConnectionState(false);
   }
 }
@@ -957,6 +1051,7 @@ async function loadData() {
     initDetailsToggle();
     initResetButton();
     initAssistantApiKey();
+    pushTimelineEvent("System", "Simulator ready.");
     setConnectionState(true);
     loadTelemetry();
     setInterval(loadTelemetry, 2000);
